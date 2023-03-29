@@ -6,6 +6,7 @@
 #include <stdexcept>
 #include <algorithm>
 #include <utility>
+#include <iterator>
 
 class ReserveProxyObj {
 public:
@@ -27,50 +28,39 @@ public:
 	SimpleVector() noexcept = default;
 
 	// Создаёт вектор из size элементов, инициализированных значением по умолчанию
-	explicit SimpleVector(size_t size) : mas_ptr(size) {
-		std::generate(mas_ptr.Get(), (mas_ptr.Get() + size), []() { return Type(); });
-		this->size = size;
-		capacity = size;
+	explicit SimpleVector(size_t size) : mas_ptr(size), size(size), capacity(size) {
+		std::generate(mas_ptr.Get(), (mas_ptr.Get() + size), [] { return Type(); });
 	}
 
 	// Создаёт вектор из size элементов, инициализированных значением value
-	SimpleVector(size_t size, const Type& value) : mas_ptr(size) {
-		std::fill(mas_ptr.Get(), mas_ptr.Get() + size, std::move(value));
-		this->size = size;
-		capacity = size;
+	SimpleVector(size_t size, const Type& value) : mas_ptr(size), size(size), capacity(size) {
+		std::fill(mas_ptr.Get(), mas_ptr.Get() + size, value);
 	}
 
-	SimpleVector(size_t size, Type&& value) : mas_ptr(size) {
+	SimpleVector(size_t size, Type&& value) : mas_ptr(size), size(size), capacity(size) {
+		auto value_ = std::make_move_iterator(&value);
 		for (size_t i = 0; i < size; ++i) {
-			mas_ptr[i] = std::move(value);
+			mas_ptr[i] = *value_;
 		}
-		this->size = size;
-		capacity = size;
 	}
 
 	// Создаёт вектор из std::initializer_list
-	SimpleVector(std::initializer_list<Type> init) : mas_ptr(init.size()) {
+	SimpleVector(std::initializer_list<Type> init) : mas_ptr(init.size()), size(init.size()), capacity(init.size()) {
 		std::copy(init.begin(), init.end(), mas_ptr.Get());
-		this->size = init.size();
-		capacity = init.size();
 	}
 
-	SimpleVector(std::initializer_list<Type>&& init) : mas_ptr(init.size()) {
+	SimpleVector(std::initializer_list<Type>&& init) : mas_ptr(init.size()), size(init.size()), capacity(init.size()) {
 		std::move(init.begin(), init.end(), mas_ptr.Get());
-		this->size = init.size();
-		capacity = init.size();
 	}
 
 	explicit SimpleVector(ReserveProxyObj obj) {
 		Reserve(obj.Get());
 	}
 
-	SimpleVector(const SimpleVector& other) {
+	SimpleVector(const SimpleVector& other) : mas_ptr(other.GetSize()), size(other.GetSize()), capacity(other.GetSize()) {
 		try {
 			if (!other.IsEmpty()) {
-				SimpleVector<Type> tmp(other.size);
-				std::copy(other.begin(), other.end(), tmp.begin());
-				swap(tmp);
+				std::copy(other.begin(), other.end(), mas_ptr.Get());
 			}
 		}
 		catch (...) {
@@ -83,11 +73,7 @@ public:
 	SimpleVector(SimpleVector&& other) {
 		try {
 			if (!other.IsEmpty()) {
-				SimpleVector<Type> tmp(std::move(other.size));
-				std::copy(std::make_move_iterator(other.begin()), std::make_move_iterator(other.end()), tmp.begin());
-				swap(tmp);
-				other.size = 0;
-				other.capacity = 0;
+				swap(other);
 			}
 		}
 		catch (...) {
@@ -98,27 +84,16 @@ public:
 	}
 
 	SimpleVector& operator=(const SimpleVector& rhs) {
-		try {
-			if (mas_ptr.Get() != rhs.begin()) {
-				SimpleVector<Type> v(rhs);
-				swap(v);
-			}
-		}
-		catch (...) {
-			throw;
+		if (this->begin() != rhs.begin()) {
+			SimpleVector<Type> v(rhs);
+			swap(v);
 		}
 		return *this;
 	}
 
 	SimpleVector& operator=(SimpleVector&& rhs) {
-		try {
-			if (mas_ptr.Get() != rhs.begin()) {
-				SimpleVector<Type> v(std::move(rhs));
-				swap(v);
-			}
-		}
-		catch (...) {
-			throw;
+		if (this->begin() != rhs.begin()) {
+			swap(rhs);
 		}
 		return *this;
 	}
@@ -232,7 +207,7 @@ public:
 				Reserve(new_size);
 			}
 			// заполняем пустые ячейки от последнего эл массива до конца
-			std::generate(end(), (mas_ptr.Get() + new_size), []() {return Type(); });
+			std::generate(end(), (mas_ptr.Get() + new_size), [] {return Type(); });
 		}
 		size = new_size;
 	}
@@ -240,49 +215,27 @@ public:
 	// Добавляет элемент в конец вектора
 	// При нехватке места увеличивает вдвое вместимость вектора
 	void PushBack(const Type& item) {
-		if (capacity == 0) {
-			SimpleVector tmp(1, item);
-			swap(tmp);
-			size = 1;
-			capacity = 1;
+		/*if (capacity <= size) {
+			size_t new_capacity = std::max(static_cast<size_t>(1), capacity * 2);
+			Reserve(new_capacity);
 		}
-		else if (size == capacity) {
-			size_t new_capacity = capacity * 2;
-			SimpleVector<Type> tmp(new_capacity);
-			std::copy(begin(), end(), tmp.begin());
-			tmp.size = size;
-			tmp[size] = item;
-			swap(tmp);
-			++size;
-			capacity = new_capacity;
-		}
-		else {
-			mas_ptr[size] = item;
-			++size;
-		}
+		mas_ptr[size] = item;
+		++size;*/
+
+		Insert(end(), item);
+
 	}
 
 	void PushBack(Type&& item) {
-		if (capacity == 0) {
-			SimpleVector tmp(1, std::move(item));
-			swap(tmp);
-			size = 1;
-			capacity = 1;
+		/*if (capacity <= size) {
+			size_t new_capacity = std::max(static_cast<size_t>(1), capacity * 2);
+			Reserve(new_capacity);
 		}
-		else if (size == capacity) {
-			size_t new_capacity = capacity * 2;
-			SimpleVector<Type> tmp(new_capacity);
-			std::move(begin(), end(), tmp.begin());
-			tmp.size = size;
-			tmp[size] = std::move(item);
-			swap(tmp);
-			++size;
-			capacity = new_capacity;
-		}
-		else {
-			mas_ptr[size] = std::move(item);
-			++size;
-		}
+		mas_ptr[size] = std::move(item);
+		++size;*/
+
+		Insert(end(), std::move(item));
+
 	}
 
 	// Вставляет значение value в позицию pos.
@@ -290,60 +243,45 @@ public:
 	// Если перед вставкой значения вектор был заполнен полностью,
 	// вместимость вектора должна увеличиться вдвое, а для вектора вместимостью 0 стать равной 1
 	Iterator Insert(ConstIterator pos, const Type& value) {
-		auto dist = std::distance(cbegin(), pos);
-		if (capacity == 0) {
-			PushBack(value);
-			return Iterator{ end() - 1 };
-		}
-		else if (size == capacity) {
-			capacity *= 2;
-			SimpleVector<Type> tmp(capacity);
-			std::copy(begin(), (begin() + dist), tmp.begin());
-			tmp.mas_ptr[dist] = value;
-			std::copy_backward((begin() + dist), end(), tmp.end());
-			swap(tmp);
-			size = ++(tmp.size);
-		}
-		else {
-			std::copy_backward((begin() + dist), (begin() + size), (begin() + size + 1));
-			mas_ptr[dist] = value;
-			++size;
-		}
+		auto dist = FunctionHelpPushBackAndInsert(pos);
+		mas_ptr[dist] = value;
 		return Iterator{ Iterator(begin() + dist) };
 	}
 
 	Iterator Insert(ConstIterator pos, Type&& value) {
+		auto dist = FunctionHelpPushBackAndInsert(pos);
+		mas_ptr[dist] = std::move(value);
+		return Iterator{ Iterator(begin() + dist) };
+	}
+
+	auto FunctionHelpPushBackAndInsert(ConstIterator pos) {
+		assert(pos >= begin() && pos <= end());
 		auto dist = std::distance(cbegin(), pos);
-		if (capacity == 0) {
-			PushBack(std::move(value));
-			return Iterator{ end() - 1 };
-		}
-		else if (size == capacity) {
-			capacity *= 2;
-			SimpleVector<Type> tmp(capacity);
-			std::move(begin(), (begin() + dist), tmp.begin());
-			tmp.mas_ptr[dist] = std::move(value);
-			std::move_backward((begin() + dist), end(), tmp.end());
-			swap(tmp);
-			size = ++(tmp.size);
+		if (capacity <= size) {
+			size_t new_capacity = std::max<size_t>(1, capacity * 2);
+			ArrayPtr<Type> tmp(new_capacity);
+			std::move(begin(), (begin() + dist), tmp.Get());
+			std::move_backward((begin() + dist), end(), (tmp.Get() + size + 1));
+			mas_ptr.swap(tmp);
+			++size;
+			capacity = new_capacity;
 		}
 		else {
 			std::move_backward((begin() + dist), (begin() + size), (begin() + size + 1));
-			mas_ptr[dist] = std::move(value);
 			++size;
 		}
-		return Iterator{ Iterator(begin() + dist) };
+		return dist;
 	}
 
 	// "Удаляет" последний элемент вектора. Вектор не должен быть пустым
 	void PopBack() noexcept {
-		if (size != 0) {
-			--size;
-		}
+		assert(size == 0);
+		--size;
 	}
 
 	// Удаляет элемент вектора в указанной позиции
 	Iterator Erase(ConstIterator pos) {
+		assert(pos >= begin() && pos < end());
 		if (pos == end()) {
 			return end();
 		}
@@ -361,37 +299,31 @@ private:
 
 template <typename Type>
 inline bool operator==(const SimpleVector<Type>& lhs, const SimpleVector<Type>& rhs) {
-	// Заглушка. Напишите тело самостоятельно
-	return std::equal(lhs.begin(), lhs.end(), rhs.begin());
+	return lhs.GetSize() == rhs.GetSize() && std::equal(lhs.begin(), lhs.end(), rhs.begin());
 }
 
 template <typename Type>
 inline bool operator!=(const SimpleVector<Type>& lhs, const SimpleVector<Type>& rhs) {
-	// Заглушка. Напишите тело самостоятельно
 	return !(lhs == rhs);
 }
 
 template <typename Type>
 inline bool operator<(const SimpleVector<Type>& lhs, const SimpleVector<Type>& rhs) {
-	// Заглушка. Напишите тело самостоятельно
 	return std::lexicographical_compare(lhs.begin(), lhs.end(), rhs.begin(), rhs.end());
 }
 
 template <typename Type>
 inline bool operator<=(const SimpleVector<Type>& lhs, const SimpleVector<Type>& rhs) {
-	// Заглушка. Напишите тело самостоятельно
 	return !(rhs < lhs);
 }
 
 template <typename Type>
 inline bool operator>(const SimpleVector<Type>& lhs, const SimpleVector<Type>& rhs) {
-	// Заглушка. Напишите тело самостоятельно
 	return rhs < lhs;
 }
 
 template <typename Type>
 inline bool operator>=(const SimpleVector<Type>& lhs, const SimpleVector<Type>& rhs) {
-	// Заглушка. Напишите тело самостоятельно
 	return !(rhs > lhs);
 }
 
