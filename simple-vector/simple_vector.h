@@ -38,10 +38,8 @@ public:
 	}
 
 	SimpleVector(size_t size, Type&& value) : mas_ptr(size), size(size), capacity(size) {
-		auto value_ = std::make_move_iterator(&value);
-		for (size_t i = 0; i < size; ++i) {
-			mas_ptr[i] = *value_;
-		}
+		auto value_ = std::move(value);
+		std::fill(mas_ptr.Get(), mas_ptr.Get() + size, value_);
 	}
 
 	// Создаёт вектор из std::initializer_list
@@ -58,29 +56,15 @@ public:
 	}
 
 	SimpleVector(const SimpleVector& other) : mas_ptr(other.GetSize()), size(other.GetSize()), capacity(other.GetSize()) {
-		try {
-			if (!other.IsEmpty()) {
-				std::copy(other.begin(), other.end(), mas_ptr.Get());
-			}
+		if (!other.IsEmpty()) {
+			std::copy(other.begin(), other.end(), mas_ptr.Get());
 		}
-		catch (...) {
-			Clear();
-			throw;
-		}
-
 	}
 
 	SimpleVector(SimpleVector&& other) {
-		try {
-			if (!other.IsEmpty()) {
-				swap(other);
-			}
+		if (!other.IsEmpty()) {
+			swap(other);
 		}
-		catch (...) {
-			Clear();
-			throw;
-		}
-
 	}
 
 	SimpleVector& operator=(const SimpleVector& rhs) {
@@ -254,28 +238,9 @@ public:
 		return Iterator{ Iterator(begin() + dist) };
 	}
 
-	auto FunctionHelpPushBackAndInsert(ConstIterator pos) {
-		assert(pos >= begin() && pos <= end());
-		auto dist = std::distance(cbegin(), pos);
-		if (capacity <= size) {
-			size_t new_capacity = std::max<size_t>(1, capacity * 2);
-			ArrayPtr<Type> tmp(new_capacity);
-			std::move(begin(), (begin() + dist), tmp.Get());
-			std::move_backward((begin() + dist), end(), (tmp.Get() + size + 1));
-			mas_ptr.swap(tmp);
-			++size;
-			capacity = new_capacity;
-		}
-		else {
-			std::move_backward((begin() + dist), (begin() + size), (begin() + size + 1));
-			++size;
-		}
-		return dist;
-	}
-
 	// "Удаляет" последний элемент вектора. Вектор не должен быть пустым
 	void PopBack() noexcept {
-		assert(size == 0);
+		assert(size != 0);
 		--size;
 	}
 
@@ -294,6 +259,25 @@ private:
 	ArrayPtr<Type> mas_ptr;
 	size_t size = 0;
 	size_t capacity = 0;
+
+	auto FunctionHelpPushBackAndInsert(ConstIterator pos) {
+		assert(pos >= begin() && pos <= end());
+		auto dist = std::distance(cbegin(), pos);
+		if (capacity <= size) {
+			size_t new_capacity = std::max<size_t>(1, capacity * 2);
+			ArrayPtr<Type> tmp(new_capacity);
+			std::move(begin(), (begin() + dist), tmp.Get());
+			std::move((begin() + dist), end(), (tmp.Get() + dist));
+			mas_ptr.swap(tmp);
+			++size;
+			capacity = new_capacity;
+		}
+		else {
+			std::move_backward((begin() + dist), (begin() + size), (begin() + size + 1));
+			++size;
+		}
+		return dist;
+	}
 };
 
 

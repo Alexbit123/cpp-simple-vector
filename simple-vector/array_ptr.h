@@ -23,7 +23,6 @@ public:
 	ArrayPtr(const ArrayPtr&) = delete;
 
 	ArrayPtr(ArrayPtr&& other) {
-		Release();
 		raw_ptr_ = other.Release();
 	}
 
@@ -35,7 +34,8 @@ public:
 	ArrayPtr& operator=(const ArrayPtr&) = delete;
 
 	ArrayPtr& operator=(ArrayPtr&& other) {
-		raw_ptr_ = exchange(other.raw_ptr_, nullptr);
+		Release();
+		raw_ptr_ = other.Release();
 		return *this;
 	}
 
@@ -57,10 +57,7 @@ public:
 
 	// Возвращает true, если указатель ненулевой, и false в противном случае
 	explicit operator bool() const {
-		if (raw_ptr_ != nullptr) {
-			return true;
-		}
-		return false;                    //Можно просто return raw_ptr_;
+		return raw_ptr_ != nullptr;
 	}
 
 	// Возвращает значение сырого указателя, хранящего адрес начала массива
