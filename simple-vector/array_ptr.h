@@ -34,8 +34,7 @@ public:
 	ArrayPtr& operator=(const ArrayPtr&) = delete;
 
 	ArrayPtr& operator=(ArrayPtr&& other) {
-		Release();
-		raw_ptr_ = other.Release();
+		swap(other);
 		return *this;
 	}
 
